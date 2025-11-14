@@ -1,40 +1,73 @@
 import streamlit as st
-from PIL import Image
+import zipfile
 import os
+from PIL import Image
+import io
+import tempfile
 
-def convert_image(input_image):
-    # Mengubah ekstensi file menjadi .jpg
-    image = Image.open(input_image)
-    output_image_path = "converted_image.jpg"
-    image = image.convert("RGB")  # Pastikan gambar di-convert ke mode RGB
-    image.save(output_image_path, "JPEG")
-    return output_image_path
+st.title("Konversi JPG → jpg (Multi Folder)")
 
-# Judul aplikasi
-st.title("Konversi Gambar JPG ke jpg")
+st.write("""
+Upload folder dalam format **ZIP**.  
+Aplikasi akan memindai seluruh isi folder dan mengubah file **.JPG** menjadi **.jpg**
+tanpa mengubah struktur folder.
+""")
 
-# Deskripsi aplikasi
-st.write("Unggah file gambar dengan ekstensi .JPG, dan aplikasi ini akan mengonversinya menjadi .jpg.")
+uploaded_zip = st.file_uploader("Upload ZIP Folder", type=["zip"])
 
-# Unggah file gambar
-uploaded_file = st.file_uploader("Pilih file gambar (.JPG)", type=["JPG"])
+if uploaded_zip:
+    # Membuat direktori sementara
+    with tempfile.TemporaryDirectory() as temp_dir:
+        zip_path = os.path.join(temp_dir, "input.zip")
 
-if uploaded_file is not None:
-    # Menampilkan gambar yang diunggah
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Gambar yang Diupload", use_column_width=True)
+        # Simpan zip ke direktori sementara
+        with open(zip_path, "wb") as f:
+            f.write(uploaded_zip.read())
 
-    # Mengonversi gambar dan simpan dengan ekstensi .jpg
-    converted_file = convert_image(uploaded_file)
+        # Ekstrak zip
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(temp_dir)
 
-    # Tampilkan tombol untuk mengunduh gambar yang telah dikonversi
-    with open(converted_file, "rb") as file:
+        # Direktori root dari folder
+        root_folder = os.listdir(temp_dir)[1]  # index 1, karena index 0 = input.zip
+        root_path = os.path.join(temp_dir, root_folder)
+
+        # Output zip buffer
+        output_buffer = io.BytesIO()
+
+        with zipfile.ZipFile(output_buffer, "w", zipfile.ZipFile.ZIP_DEFLATED) as output_zip:
+
+            # Telusuri semua file dan folder
+            for folder_path, subfolders, files in os.walk(root_path):
+                for file in files:
+                    file_path = os.path.join(folder_path, file)
+
+                    # Relatif path untuk disimpan di zip
+                    arcname = os.path.relpath(file_path, root_path)
+
+                    # Jika ekstensi .JPG → konversi ke .jpg
+                    if file.lower().endswith(".jpg") and not file.endswith(".jpg"):
+                        new_filename = file[:-4] + ".jpg"
+                        arcname = os.path.relpath(os.path.join(folder_path, new_filename), root_path)
+
+                        img = Image.open(file_path).convert("RGB")
+                        img_byte = io.BytesIO()
+                        img.save(img_byte, format="JPEG")
+                        img_byte.seek(0)
+
+                        output_zip.writestr(arcname, img_byte.read())
+
+                    else:
+                        # File lain → copy apa adanya
+                        output_zip.write(file_path, arcname)
+
+        output_buffer.seek(0)
+
+        st.success("Berhasil! Unduh folder hasil konversi di bawah:")
+
         st.download_button(
-            label="Unduh Gambar yang Dikonversi (.jpg)",
-            data=file,
-            file_name="converted_image.jpg",
-            mime="image/jpeg"
+            label="Download ZIP Hasil Konversi",
+            data=output_buffer,
+            file_name="converted_folder.zip",
+            mime="application/zip"
         )
-    
-    # Hapus file sementara setelah download (opsional)
-    os.remove(converted_file)
