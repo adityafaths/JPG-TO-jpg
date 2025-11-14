@@ -35,7 +35,8 @@ if uploaded_zip:
         # Output zip buffer
         output_buffer = io.BytesIO()
 
-        with zipfile.ZipFile(output_buffer, "w", zipfile.ZipFile.ZIP_DEFLATED) as output_zip:
+        # Gunakan mode 'w' untuk zipfile, tetapi pastikan untuk menulis di buffer dengan benar
+        with zipfile.ZipFile(output_buffer, "w", zipfile.ZIP_DEFLATED) as output_zip:
 
             # Telusuri semua file dan folder
             for folder_path, subfolders, files in os.walk(root_path):
@@ -61,6 +62,7 @@ if uploaded_zip:
                         # File lain → copy apa adanya
                         output_zip.write(file_path, arcname)
 
+        # Pastikan kita memindahkan pointer ke awal buffer
         output_buffer.seek(0)
 
         st.success("Berhasil! Unduh folder hasil konversi di bawah:")
